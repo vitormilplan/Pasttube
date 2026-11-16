@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Painel de Liberação de Juntas — M.449</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="topo">
+    <div>
+      <h1>Painel de liberação de juntas</h1>
+      <p class="sub">Takeoff 100% × SGJ × Lista de Pastas × Rede de Precedência — os arquivos são lidos só no seu navegador, nada é enviado para servidor.</p>
+    </div>
+    <nav class="abas" id="abas">
+      <button data-aba="importar" class="ativa">1. Importar</button>
+      <button data-aba="painel" disabled>2. Painel</button>
+      <button data-aba="linhas" disabled>3. Linhas</button>
+      <button data-aba="rede">Rede de precedência</button>
+      <button data-aba="config">Configurações</button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- IMPORTAR -->
+    <section id="aba-importar" class="aba ativa">
+      <div class="drops">
+        <label class="drop" data-tipo="takeoff">
+          <input type="file" accept=".xlsx,.xlsb,.xlsm,.xls">
+          <span class="drop-titulo">Takeoff de tubulação</span>
+          <span class="drop-desc">.xlsb / .xlsx — aba <b>PROG TUB</b>. Usa as linhas com avanço de juntas (coluna AQ) = 100%.</span>
+          <span class="drop-status">Arraste ou clique para escolher</span>
+        </label>
+        <label class="drop" data-tipo="sgj">
+          <input type="file" accept=".xlsx,.xlsb,.xlsm,.xls">
+          <span class="drop-titulo">SGJ — Situação Geral de Juntas</span>
+          <span class="drop-desc">Aba <b>SGJ</b>. Linha (C), junta (L), status (CP).</span>
+          <span class="drop-status">Arraste ou clique para escolher</span>
+        </label>
+        <label class="drop" data-tipo="pastas">
+          <input type="file" accept=".xlsx,.xlsb,.xlsm,.xls">
+          <span class="drop-titulo">Lista de Pastas</span>
+          <span class="drop-desc">Aba <b>MILPLAN</b>. Line Code → N° da pasta - para e Subsystem.</span>
+          <span class="drop-status">Arraste ou clique para escolher</span>
+        </label>
+      </div>
+      <div class="acoes">
+        <button id="btn-processar" class="primario" disabled>Processar</button>
+        <span id="msg" class="msg"></span>
+      </div>
+      <div class="dica">
+        <b>Como funciona:</b> (1) pega no takeoff as linhas com 100% de juntas executadas → (2) confere no SGJ se todas as juntas dessas linhas estão
+        "Junta Liberada" → (3) busca pasta e subsistema na Lista de Pastas → (4) usa a Rede de Precedência para dar a ordem de prioridade e dizer
+        quem pode ser executado agora e quem está aguardando etapa anterior.
+      </div>
+    </section>
+
+    <!-- PAINEL -->
+    <section id="aba-painel" class="aba">
+      <div class="kpis" id="kpis"></div>
+      <h2>Escada de prioridades</h2>
+      <p class="nota">Cada degrau só deve ser atacado depois que o anterior estiver sem pendências. Clique num degrau para ver as linhas.</p>
+      <div class="escada" id="escada"></div>
+      <div class="graficos">
+        <div class="cartao"><h3>Juntas pendentes por etapa</h3><div class="g"><canvas id="g-etapa"></canvas></div></div>
+        <div class="cartao"><h3>Status das juntas pendentes</h3><div class="g"><canvas id="g-status"></canvas></div></div>
+        <div class="cartao largo"><h3>Pastas com mais juntas pendentes</h3><div class="g"><canvas id="g-pastas"></canvas></div></div>
+      </div>
+      <div class="alertas" id="alertas"></div>
+      <div class="acoes"><button id="btn-exportar" class="primario">Exportar Excel</button></div>
+    </section>
+
+    <!-- LINHAS -->
+    <section id="aba-linhas" class="aba">
+      <div class="filtros">
+        <input id="f-busca" type="search" placeholder="Buscar linha, pasta, subsistema, junta…">
+        <select id="f-situacao"><option value="">Todas as situações</option></select>
+        <select id="f-etapa"><option value="">Todas as etapas</option></select>
+        <label class="chk"><input type="checkbox" id="f-pend"> Só com pendência</label>
+        <span id="f-cont" class="nota"></span>
+        <button id="btn-exportar2">Exportar Excel</button>
+      </div>
+      <div class="tabela-wrap">
+        <table id="tabela">
+          <thead><tr>
+            <th data-k="etapa">Ordem</th><th data-k="etapaNome">Etapa</th><th data-k="situacao">Situação</th>
+            <th data-k="linha">Linha</th><th data-k="pendentes">Pend.</th><th data-k="previstas">Prev. SGJ</th>
+            <th data-k="juntasTakeoff">Juntas takeoff</th><th data-k="pastas">Pasta</th><th data-k="subsistemas">Subsistema</th><th data-k="status">Status</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <p class="nota">Clique numa linha para ver as juntas pendentes e as predecessoras/sucessoras.</p>
+    </section>
+
+    <!-- REDE -->
+    <section id="aba-rede" class="aba">
+      <p class="nota">Esta tabela é a Rede de Precedência transcrita. <b>Etapa</b> = ordem de execução (menor vem antes). Subsistemas com a mesma etapa correm em paralelo.
+        Alterações ficam salvas neste navegador. Para nova revisão da rede, edite aqui e exporte o JSON (ou edite <code>js/rede-padrao.js</code> no repositório).</p>
+      <div class="acoes">
+        <button id="rede-add">+ Adicionar subsistema</button>
+        <button id="rede-salvar" class="primario">Salvar</button>
+        <button id="rede-exportar">Exportar JSON</button>
+        <label class="botao">Importar JSON<input type="file" id="rede-importar" accept=".json" hidden></label>
+        <button id="rede-padrao">Voltar ao padrão</button>
+        <span id="rede-msg" class="msg"></span>
+      </div>
+      <div class="tabela-wrap">
+        <table id="tabela-rede">
+          <thead><tr><th>Subsistema</th><th>Etapa</th><th>Nome da etapa</th><th>Grupo</th><th>Descrição</th><th>Predecessoras</th><th>Sucessoras</th><th>Libera (resumo)</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- CONFIG -->
+    <section id="aba-config" class="aba">
+      <p class="nota">Só mexa aqui se o layout de alguma planilha mudar. Colunas em letra do Excel (A, B, … AQ). Fica salvo neste navegador.</p>
+      <div class="config" id="config"></div>
+      <div class="acoes">
+        <button id="cfg-salvar" class="primario">Salvar</button>
+        <button id="cfg-padrao">Voltar ao padrão</button>
+        <span id="cfg-msg" class="msg"></span>
+      </div>
+    </section>
+  </main>
+
+  <div id="carregando" class="carregando" hidden><div class="spinner"></div><span id="carregando-txt">Lendo…</span></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="js/core.js"></script>
+  <script src="js/rede-padrao.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
